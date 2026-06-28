@@ -3,64 +3,83 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Мониторинг Линии Баскетбол (Pinnacle)</title>
+    <title>Pinnacle Basketball Tracker</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
 </head>
 <body class="bg-gray-900 text-gray-100 font-sans">
 
-    <div class="container mx-auto p-4 max-w-5xl">
-        <header class="mb-8 flex justify-between items-center border-b border-gray-800 pb-4">
+    <div class="container mx-auto p-4 max-w-6xl">
+        <header class="mb-6 flex justify-between items-center border-b border-gray-800 pb-4">
             <div>
                 <h1 class="text-2xl font-bold text-yellow-500">🏀 Pinnacle Basketball Tracker</h1>
-                <p class="text-sm text-gray-400">Движение линии на исходы матчей</p>
+                <p class="text-sm text-gray-400">Фора и тотал — движение линии Pinnacle</p>
             </div>
             <div id="status" class="text-xs bg-green-900 text-green-300 px-3 py-1 rounded-full animate-pulse">
-                Синхронизация с Firebase Live
+                Live Firebase
             </div>
         </header>
 
         <div class="bg-gray-800 rounded-lg overflow-hidden shadow-xl border border-gray-700">
-            <table class="w-full text-left border-collapse">
+            <table class="w-full text-left border-collapse text-sm">
                 <thead>
-                    <tr class="bg-gray-700 text-gray-300 text-sm uppercase">
-                        <th class="p-4">Лига / Время</th>
-                        <th class="p-4">Матч</th>
-                        <th class="p-4 text-center">Кэф П1</th>
-                        <th class="p-4 text-center">Кэф П2</th>
-                        <th class="p-4 text-center">Лог изменений</th>
+                    <tr class="bg-gray-700 text-gray-300 text-xs uppercase">
+                        <th class="p-3">Лига / Время</th>
+                        <th class="p-3">Матч</th>
+                        <th class="p-3 text-center">Фора хозяев</th>
+                        <th class="p-3 text-center">Фора гостей</th>
+                        <th class="p-3 text-center">Тотал</th>
+                        <th class="p-3 text-center">Over / Under</th>
+                        <th class="p-3 text-center">История</th>
                     </tr>
                 </thead>
                 <tbody id="matches-list" class="divide-y divide-gray-700">
                     <tr>
-                        <td colspan="5" class="p-8 text-center text-gray-500">Загрузка матчей из базы данных...</td>
+                        <td colspan="7" class="p-8 text-center text-gray-500">Загрузка...</td>
                     </tr>
                 </tbody>
             </table>
         </div>
+
+        <p class="text-xs text-gray-600 mt-3 text-right">Обновляется автоматически каждый час</p>
     </div>
 
-    <div id="modal" class="hidden fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center p-4">
-        <div class="bg-gray-800 rounded-lg p-6 max-w-md w-full border border-gray-700">
+    <!-- Модальное окно истории -->
+    <div id="modal" class="hidden fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center p-4 z-50">
+        <div class="bg-gray-800 rounded-lg p-6 max-w-lg w-full border border-gray-700">
             <div class="flex justify-between items-center mb-4">
                 <h3 class="text-lg font-bold text-yellow-500" id="modal-title">История линии</h3>
-                <button onclick="closeModal()" class="text-gray-400 hover:text-white font-bold">✕</button>
+                <button onclick="closeModal()" class="text-gray-400 hover:text-white text-xl font-bold">✕</button>
             </div>
-            <div class="max-h-60 overflow-y-auto space-y-2 text-sm" id="modal-content"></div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-xs">
+                    <thead>
+                        <tr class="text-gray-400 border-b border-gray-600">
+                            <th class="p-2 text-left">Время</th>
+                            <th class="p-2 text-center">Фора х.</th>
+                            <th class="p-2 text-center">Фора г.</th>
+                            <th class="p-2 text-center">Тотал</th>
+                            <th class="p-2 text-center">Over</th>
+                            <th class="p-2 text-center">Under</th>
+                        </tr>
+                    </thead>
+                    <tbody id="modal-content" class="divide-y divide-gray-700"></tbody>
+                </table>
+            </div>
         </div>
     </div>
 
     <script>
-       const firebaseConfig = {
-  apiKey: "AIzaSyCW3BPY5V-OU3N2BI-_2DvSkFi17gBpb2w",
-  authDomain: "pinnacle-tracker-a1f41.firebaseapp.com",
-  databaseURL: "https://pinnacle-tracker-a1f41-default-rtdb.firebaseio.com",
-  projectId: "pinnacle-tracker-a1f41",
-  storageBucket: "pinnacle-tracker-a1f41.firebasestorage.app",
-  messagingSenderId: "648486208691",
-  appId: "1:648486208691:web:8b3f2b78b3e8b79e9d5cc6"
-};
+        const firebaseConfig = {
+            apiKey: "AIzaSyCW3BPY5V-OU3N2BI-_2DvSkFi17gBpb2w",
+            authDomain: "pinnacle-tracker-a1f41.firebaseapp.com",
+            databaseURL: "https://pinnacle-tracker-a1f41-default-rtdb.firebaseio.com",
+            projectId: "pinnacle-tracker-a1f41",
+            storageBucket: "pinnacle-tracker-a1f41.firebasestorage.app",
+            messagingSenderId: "648486208691",
+            appId: "1:648486208691:web:8b3f2b78b3e8b79e9d5cc6"
+        };
 
         firebase.initializeApp(firebaseConfig);
         const database = firebase.database();
@@ -69,43 +88,90 @@
         database.ref('basketball_lines').on('value', (snapshot) => {
             const data = snapshot.val();
             if (!data) {
-                document.getElementById('matches-list').innerHTML = `<tr><td colspan="5" class="p-8 text-center text-gray-500">Нет активных матчей в БД</td></tr>`;
+                document.getElementById('matches-list').innerHTML =
+                    `<tr><td colspan="7" class="p-8 text-center text-gray-500">Нет активных матчей</td></tr>`;
                 return;
             }
-            renderMatches(data);
             localData = data;
+            renderMatches(data);
         });
+
+        function formatSpread(point, odds) {
+            if (!point && !odds) return '—';
+            const sign = point > 0 ? '+' : '';
+            return `<span class="font-mono font-bold">${sign}${point}</span>
+                    <span class="text-gray-400 text-xs ml-1">(${odds.toFixed(2)})</span>`;
+        }
+
+        function formatDate(isoString) {
+            if (!isoString) return '—';
+            return new Date(isoString).toLocaleDateString('ru-RU', {
+                day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'
+            });
+        }
+
+        function getTrend(current, previous, threshold) {
+            if (!previous) return '';
+            if (current > previous + threshold) return '🔺';
+            if (current < previous - threshold) return '🔻';
+            return '';
+        }
 
         function renderMatches(data) {
             const tbody = document.getElementById('matches-list');
             tbody.innerHTML = '';
 
-            for (let id in data) {
-                const match = data[id];
-                const info = match.info;
-                const history = Object.values(match.history || {});
-                
-                let homeTrend = '';
-                let awayTrend = '';
-                
-                if (history.length > 1) {
-                    const prev = history[history.length - 2];
-                    if (info.last_home_odds > prev.home_odds) homeTrend = '🔺 text-green-400';
-                    if (info.last_home_odds < prev.home_odds) homeTrend = '🔻 text-red-400';
-                    if (info.last_away_odds > prev.away_odds) awayTrend = '🔺 text-green-400';
-                    if (info.last_away_odds < prev.away_odds) awayTrend = '🔻 text-red-400';
-                }
+            const entries = Object.entries(data);
+            if (entries.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="7" class="p-8 text-center text-gray-500">Нет активных матчей</td></tr>`;
+                return;
+            }
 
-                const date = new Date(info.starts).toLocaleDateString('ru-RU', {day: 'numeric', month: 'short', hour: '2-digit', minute:'2-digit'});
+            // Сортируем по времени начала
+            entries.sort((a, b) => new Date(a[1].info?.starts) - new Date(b[1].info?.starts));
+
+            for (let [id, match] of entries) {
+                const info = match.info;
+                if (!info) continue;
+
+                const history = Object.values(match.history || {});
+                const prev = history.length > 1 ? history[history.length - 2] : null;
+
+                const spreadTrend = prev ? getTrend(info.home_spread, prev.home_spread, 0.25) : '';
+                const totalTrend = prev ? getTrend(info.total_line, prev.total_line, 0.5) : '';
+                const overTrend = prev ? getTrend(info.over_odds, prev.over_odds, 0.01) : '';
 
                 const tr = document.createElement('tr');
                 tr.className = "hover:bg-gray-700/50 transition";
                 tr.innerHTML = `
-                    <td class="p-4 text-xs text-gray-400"><span class="block text-gray-300 font-semibold">${info.league}</span>${date}</td>
-                    <td class="p-4 font-medium"><div>${info.home}</div><div class="text-gray-400">${info.away}</div></td>
-                    <td class="p-4 text-center font-mono font-bold text-lg ${homeTrend}">${info.last_home_odds.toFixed(2)}</td>
-                    <td class="p-4 text-center font-mono font-bold text-lg ${awayTrend}">${info.last_away_odds.toFixed(2)}</td>
-                    <td class="p-4 text-center"><button onclick="showHistory('${id}')" class="bg-gray-700 hover:bg-yellow-600 text-gray-200 hover:text-white px-3 py-1 rounded text-xs transition">📊 Лог (${history.length})</button></td>
+                    <td class="p-3 text-xs">
+                        <span class="block text-yellow-400 font-semibold">${info.league || '—'}</span>
+                        <span class="text-gray-400">${formatDate(info.starts)}</span>
+                    </td>
+                    <td class="p-3">
+                        <div class="font-medium">${info.home || '—'}</div>
+                        <div class="text-gray-400 text-xs">${info.away || '—'}</div>
+                    </td>
+                    <td class="p-3 text-center">
+                        ${spreadTrend} ${formatSpread(info.home_spread, info.home_spread_odds)}
+                    </td>
+                    <td class="p-3 text-center">
+                        ${formatSpread(info.away_spread, info.away_spread_odds)}
+                    </td>
+                    <td class="p-3 text-center font-mono font-bold text-yellow-400">
+                        ${totalTrend} ${info.total_line || '—'}
+                    </td>
+                    <td class="p-3 text-center text-xs">
+                        <span class="text-green-400">${overTrend} O ${info.over_odds ? info.over_odds.toFixed(2) : '—'}</span>
+                        <span class="text-gray-500 mx-1">/</span>
+                        <span class="text-red-400">U ${info.under_odds ? info.under_odds.toFixed(2) : '—'}</span>
+                    </td>
+                    <td class="p-3 text-center">
+                        <button onclick="showHistory('${id}')"
+                            class="bg-gray-700 hover:bg-yellow-600 text-gray-200 hover:text-white px-3 py-1 rounded text-xs transition">
+                            📊 (${history.length})
+                        </button>
+                    </td>
                 `;
                 tbody.appendChild(tr);
             }
@@ -113,22 +179,37 @@
 
         function showHistory(id) {
             const match = localData[id];
-            document.getElementById('modal-title').innerText = `${match.info.home} - ${match.info.away}`;
-            const content = document.getElementById('modal-content');
-            content.innerHTML = '';
-            
+            if (!match) return;
+            document.getElementById('modal-title').innerText =
+                `${match.info.home} — ${match.info.away}`;
+
+            const tbody = document.getElementById('modal-content');
+            tbody.innerHTML = '';
+
             const historyArray = Object.values(match.history || {}).reverse();
             historyArray.forEach(record => {
-                const timeStr = new Date(record.timestamp * 1000).toLocaleTimeString('ru-RU', {hour: '2-digit', minute: '2-digit'});
-                const div = document.createElement('div');
-                div.className = "flex justify-between p-2 bg-gray-700/30 rounded font-mono text-xs";
-                div.innerHTML = `<span>${timeStr}</span><span>П1: <strong class="text-yellow-400">${record.home_odds.toFixed(2)}</strong></span><span>П2: <strong class="text-blue-400">${record.away_odds.toFixed(2)}</strong></span>`;
-                content.appendChild(div);
+                const timeStr = new Date(record.timestamp * 1000).toLocaleTimeString('ru-RU', {
+                    hour: '2-digit', minute: '2-digit'
+                });
+                const tr = document.createElement('tr');
+                tr.className = "hover:bg-gray-700/30";
+                tr.innerHTML = `
+                    <td class="p-2 text-gray-400">${timeStr}</td>
+                    <td class="p-2 text-center font-mono">${record.home_spread > 0 ? '+' : ''}${record.home_spread ?? '—'}</td>
+                    <td class="p-2 text-center font-mono">${record.away_spread > 0 ? '+' : ''}${record.away_spread ?? '—'}</td>
+                    <td class="p-2 text-center font-mono text-yellow-400">${record.total_line ?? '—'}</td>
+                    <td class="p-2 text-center text-green-400">${record.over_odds ? record.over_odds.toFixed(2) : '—'}</td>
+                    <td class="p-2 text-center text-red-400">${record.under_odds ? record.under_odds.toFixed(2) : '—'}</td>
+                `;
+                tbody.appendChild(tr);
             });
+
             document.getElementById('modal').classList.remove('hidden');
         }
 
-        function closeModal() { document.getElementById('modal').classList.add('hidden'); }
+        function closeModal() {
+            document.getElementById('modal').classList.add('hidden');
+        }
     </script>
 </body>
 </html>

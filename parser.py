@@ -13,6 +13,7 @@ else:
     firebase_creds = json.loads(os.environ.get('FIREBASE_CONFIG_JSON'))
     cred = credentials.Certificate(firebase_creds)
 
+# ТВОЙ URL ИЗ ФАЙРБЕЙС
 FIREBASE_DB_URL = "https://pinnacle-tracker-a1f41-default-rtdb.firebaseio.com/" 
 
 if not firebase_admin._apps:
@@ -20,70 +21,76 @@ if not firebase_admin._apps:
         'databaseURL': FIREBASE_DB_URL
     })
 
-# 2. Конфигурация RapidAPI
-RAPIDAPI_KEY = os.environ.get('RAPIDAPI_KEY')
-RAPIDAPI_HOST = "pinnacle-odds-api.p.rapidapi.com"
+# 2. Конфигурация OddsPapi
+# Скрипт возьмет ключ из твоего секрет-поля RAPIDAPI_KEY на GitHub
+API_KEY = os.environ.get('RAPIDAPI_KEY')
+API_HOST = "oddspapi.p.rapidapi.com" # Хост для RapidAPI шлюза
 
-headers = {
-    "x-rapidapi-key": RAPIDAPI_KEY,
-    "x-rapidapi-host": RAPIDAPI_HOST
-}
-
-def get_all_basketball_leagues():
-    """Шаг 1: Получаем список всех живых лиг для баскетбола (sport_id = 4)"""
-    url = "https://pinnacle-odds-api.p.rapidapi.com/4/leagues"
+def get_basketball_odds_from_papi():
+    # Эндпоинт для получения коэффициентов (обычно /odds или /fixtures/odds)
+    # Запрашиваем прематч линии на баскетбол
+    url = "https://oddspapi.p.rapidapi.com/v5/odds"
+    
+    params = {
+        "sport": "basketball",
+        "bookmakers": "pinnacle",  # Просим выдать кэфы конкретно Пинакла
+        "markets": "moneyline"     # Нам нужны чистые исходы матча (П1/П2)
+    }
+    
+    headers = {
+        "x-rapidapi-key": API_KEY,
+        "x-rapidapi-host": API_HOST
+    }
+    
     try:
-        response = requests.get(url, headers=headers, timeout=15)
+        response = requests.get(url, headers=headers, params=params, timeout=15)
         if response.status_code == 200:
-            leagues = response.json()
-            # Собираем только ID тех лиг, у которых есть активные матчи
-            return [str(lg.get('id')) for lg in leagues if lg.get('has_documents') or lg.get('id')]
+            # Большинство B2B API отдают список матчей напрямую или в массиве 'data'/'results'
+            res_data = response.json()
+            if isinstance(res_data, list):
+                return res_data
+            return res_data.get('data', res_data.get('results', []))
         else:
-            print(f"Не удалось получить список лиг. Ошибка {response.status_code}")
+            print(f"Ошибка OddsPapi: {response.status_code}")
+            print(f"Ответ от сервера: {response.text}")
             return []
     except Exception as e:
-        print(f"Ошибка при запросе списка лиг: {e}")
+        print(f"Ошибка запроса к OddsPapi: {e}")
         return []
 
-def get_odds_for_league(league_id):
-    """Шаг 2: Скачиваем матчи для конкретной лиги"""
-    url = f"https://pinnacle-odds-api.p.rapidapi.com/odds/{league_id}"
-    try:
-        response = requests.get(url, headers=headers, timeout=15)
-        if response.status_code == 200:
-            data = response.json()
-            if isinstance(data, list):
-                return data
-            return data.get('events', [])
-        return []
-    except:
-        return []
-
-def save_to_firebase(events, current_time):
-    """Шаг 3: Сохраняем матчи в Firebase"""
+def save_to_firebase(fixtures):
     ref = db.reference('basketball_lines')
+    current_time = int(time.time())
     count = 0
     
-    for event in events:
-        periods = event.get('periods', {})
-        num_0 = periods.get('num_0', {})
-        moneyline = num_0.get('moneyline', {})
+    for fixture in fixtures:
+        # Парсим структуру матча согласно нормализованному формату OddsPapi
+        # Обычно: fixture['home_team'], fixture['away_team'], fixture['odds']
+        home_team = fixture.get('home_team', fixture.get('home'))
+        away_team = fixture.get('away_team', fixture.get('away'))
+        league = fixture.get('tournament_name', fixture.get('league', 'Basketball Match'))
+        start_time = fixture.get('start_time', fixture.get('starts', ''))
         
-        if not moneyline:
-            continue 
+        # Вытаскиваем коэффициенты букмекера
+        odds_data = fixture.get('odds', {})
+        pinnacle_odds = odds_data.get('pinnacle', {})
+        
+        # Если вложенность глубже (например, через маркет h2h/moneyline)
+        if not pinnacle_odds and 'moneyline' in odds_data:
+            pinnacle_odds = odds_data.get('moneyline', {}).get('pinnacle', {})
             
-        event_id = str(event.get('id'))
-        home_team = event.get('home', 'Home Team')
-        away_team = event.get('away', 'Away Team')
-        league = event.get('league_name', 'Basketball League')
-        start_time = event.get('starts', '')
-        
-        home_odds = float(moneyline.get('home', 0))
-        away_odds = float(moneyline.get('away', 0))
+        if not pinnacle_odds:
+            continue # Пропускаем матч, если Пинакл еще не дал на него линию
+            
+        # Названия ключей кэфов обычно 'home'/'away' или '1'/'2'
+        home_odds = float(pinnacle_odds.get('home', pinnacle_odds.get('1', 0)))
+        away_odds = float(pinnacle_odds.get('away', pinnacle_odds.get('2', 0)))
         
         if home_odds == 0 or away_odds == 0:
             continue
 
+        event_id = str(fixture.get('id', fixture.get('fixture_id', count)))
+        
         history_entry = {
             "timestamp": current_time,
             "home_odds": home_odds,
@@ -91,6 +98,8 @@ def save_to_firebase(events, current_time):
         }
         
         match_ref = ref.child(event_id)
+        
+        # Записываем актуальную инфу
         match_ref.child('info').update({
             "home": home_team,
             "away": away_team,
@@ -98,30 +107,22 @@ def save_to_firebase(events, current_time):
             "starts": start_time,
             "last_home_odds": home_odds,
             "last_away_odds": away_odds,
-            "last_update": current_time
+            "last_update": current_time,
+            "bookmaker_source": "Pinnacle"
         })
+        
+        # Пушим точку в историю изменений
         match_ref.child('history').push(history_entry)
         count += 1
-    return count
+        
+    print(f"Синхронизация с OddsPapi завершена! Обновлено матчей: {count}")
 
 if __name__ == "__main__":
-    print("Начинаем сбор всех баскетбольных лиг...")
-    league_ids = get_all_basketball_leagues()
-    
-    if not league_ids:
-        print("Активные лиги не найдены. Проверь подписку или RAPIDAPI_KEY.")
+    if not API_KEY:
+        print("Критическая ошибка: RAPIDAPI_KEY не задан в Secrets на GitHub.")
     else:
-        print(f"Найдено лиг для проверки: {len(league_ids)}. Начинаем сбор коэффициентов...")
-        total_saved = 0
-        current_time = int(time.time())
-        
-        # Перебираем лиги по очереди (берем первые 20, чтобы не превысить лимиты за один запуск)
-        for idx, league_id in enumerate(league_ids[:20]):
-            events = get_odds_for_league(league_id)
-            if events:
-                saved = save_to_firebase(events, current_time)
-                total_saved += saved
-            # Небольшая пауза, чтобы RapidAPI не ругался на спам-запросы
-            time.sleep(0.5)
-            
-        print(f"Сбор завершен! Всего добавлено матчей из всех лиг в Firebase: {total_saved}")
+        data = get_basketball_odds_from_papi()
+        if data:
+            save_to_firebase(data)
+        else:
+            print("Линия OddsPapi пуста или эндпоинт вернул пустой массив.")

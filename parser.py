@@ -24,7 +24,7 @@ if not firebase_admin._apps:
 
 # 2. Конфигурация запроса к API Pinnacle через RapidAPI
 RAPIDAPI_KEY = os.environ.get('RAPIDAPI_KEY', 'ЗДЕСЬ_МОЖЕТ_БЫТЬ_ТВОЙ_КЛЮЧ_ДЛЯ_ТЕСТОВ_ДОМА')
-RAPIDAPI_HOST = "pinnacle-odds.p.rapidapi.com"
+RAPIDAPI_HOST = "pinnacle-odds-api.p.rapidapi.com"
 
 def get_basketball_lines():
     url = "https://pinnacle-odds.p.rapidapi.com/kit/v1/markets"

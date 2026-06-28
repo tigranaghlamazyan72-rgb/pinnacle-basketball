@@ -10,10 +10,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Копируем файлы репозитория
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4 # обновили с v3 на v4
 
     - name: Включаем Python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5 # обновили с v4 на v5
       with:
         python-version: '3.10'
 

@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Мониторинг Линии Баскетбол (Pinnacle)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+</head>
+<body class="bg-gray-900 text-gray-100 font-sans">
+
+    <div class="container mx-auto p-4 max-w-5xl">
+        <header class="mb-8 flex justify-between items-center border-b border-gray-800 pb-4">
+            <div>
+                <h1 class="text-2xl font-bold text-yellow-500">🏀 Pinnacle Basketball Tracker</h1>
+                <p class="text-sm text-gray-400">Движение линии на исходы матчей</p>
+            </div>
+            <div id="status" class="text-xs bg-green-900 text-green-300 px-3 py-1 rounded-full animate-pulse">
+                Синхронизация с Firebase Live
+            </div>
+        </header>
+
+        <div class="bg-gray-800 rounded-lg overflow-hidden shadow-xl border border-gray-700">
+            <table class="w-full text-left border-collapse">
+                <thead>
+                    <tr class="bg-gray-700 text-gray-300 text-sm uppercase">
+                        <th class="p-4">Лига / Время</th>
+                        <th class="p-4">Матч</th>
+                        <th class="p-4 text-center">Кэф П1</th>
+                        <th class="p-4 text-center">Кэф П2</th>
+                        <th class="p-4 text-center">Лог изменений</th>
+                    </tr>
+                </thead>
+                <tbody id="matches-list" class="divide-y divide-gray-700">
+                    <tr>
+                        <td colspan="5" class="p-8 text-center text-gray-500">Загрузка матчей из базы данных...</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div id="modal" class="hidden fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center p-4">
+        <div class="bg-gray-800 rounded-lg p-6 max-w-md w-full border border-gray-700">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-bold text-yellow-500" id="modal-title">История линии</h3>
+                <button onclick="closeModal()" class="text-gray-400 hover:text-white font-bold">✕</button>
+            </div>
+            <div class="max-h-60 overflow-y-auto space-y-2 text-sm" id="modal-content"></div>
+        </div>
+    </div>
+
+    <script>
+       const firebaseConfig = {
+  apiKey: "AIzaSyCW3BPY5V-OU3N2BI-_2DvSkFi17gBpb2w",
+  authDomain: "pinnacle-tracker-a1f41.firebaseapp.com",
+  databaseURL: "https://pinnacle-tracker-a1f41-default-rtdb.firebaseio.com",
+  projectId: "pinnacle-tracker-a1f41",
+  storageBucket: "pinnacle-tracker-a1f41.firebasestorage.app",
+  messagingSenderId: "648486208691",
+  appId: "1:648486208691:web:8b3f2b78b3e8b79e9d5cc6"
+};
+
+        firebase.initializeApp(firebaseConfig);
+        const database = firebase.database();
+        let localData = {};
+
+        database.ref('basketball_lines').on('value', (snapshot) => {
+            const data = snapshot.val();
+            if (!data) {
+                document.getElementById('matches-list').innerHTML = `<tr><td colspan="5" class="p-8 text-center text-gray-500">Нет активных матчей в БД</td></tr>`;
+                return;
+            }
+            renderMatches(data);
+            localData = data;
+        });
+
+        function renderMatches(data) {
+            const tbody = document.getElementById('matches-list');
+            tbody.innerHTML = '';
+
+            for (let id in data) {
+                const match = data[id];
+                const info = match.info;
+                const history = Object.values(match.history || {});
+                
+                let homeTrend = '';
+                let awayTrend = '';
+                
+                if (history.length > 1) {
+                    const prev = history[history.length - 2];
+                    if (info.last_home_odds > prev.home_odds) homeTrend = '🔺 text-green-400';
+                    if (info.last_home_odds < prev.home_odds) homeTrend = '🔻 text-red-400';
+                    if (info.last_away_odds > prev.away_odds) awayTrend = '🔺 text-green-400';
+                    if (info.last_away_odds < prev.away_odds) awayTrend = '🔻 text-red-400';
+                }
+
+                const date = new Date(info.starts).toLocaleDateString('ru-RU', {day: 'numeric', month: 'short', hour: '2-digit', minute:'2-digit'});
+
+                const tr = document.createElement('tr');
+                tr.className = "hover:bg-gray-700/50 transition";
+                tr.innerHTML = `
+                    <td class="p-4 text-xs text-gray-400"><span class="block text-gray-300 font-semibold">${info.league}</span>${date}</td>
+                    <td class="p-4 font-medium"><div>${info.home}</div><div class="text-gray-400">${info.away}</div></td>
+                    <td class="p-4 text-center font-mono font-bold text-lg ${homeTrend}">${info.last_home_odds.toFixed(2)}</td>
+                    <td class="p-4 text-center font-mono font-bold text-lg ${awayTrend}">${info.last_away_odds.toFixed(2)}</td>
+                    <td class="p-4 text-center"><button onclick="showHistory('${id}')" class="bg-gray-700 hover:bg-yellow-600 text-gray-200 hover:text-white px-3 py-1 rounded text-xs transition">📊 Лог (${history.length})</button></td>
+                `;
+                tbody.appendChild(tr);
+            }
+        }
+
+        function showHistory(id) {
+            const match = localData[id];
+            document.getElementById('modal-title').innerText = `${match.info.home} - ${match.info.away}`;
+            const content = document.getElementById('modal-content');
+            content.innerHTML = '';
+            
+            const historyArray = Object.values(match.history || {}).reverse();
+            historyArray.forEach(record => {
+                const timeStr = new Date(record.timestamp * 1000).toLocaleTimeString('ru-RU', {hour: '2-digit', minute: '2-digit'});
+                const div = document.createElement('div');
+                div.className = "flex justify-between p-2 bg-gray-700/30 rounded font-mono text-xs";
+                div.innerHTML = `<span>${timeStr}</span><span>П1: <strong class="text-yellow-400">${record.home_odds.toFixed(2)}</strong></span><span>П2: <strong class="text-blue-400">${record.away_odds.toFixed(2)}</strong></span>`;
+                content.appendChild(div);
+            });
+            document.getElementById('modal').classList.remove('hidden');
+        }
+
+        function closeModal() { document.getElementById('modal').classList.add('hidden'); }
+    </script>
+</body>
+</html>

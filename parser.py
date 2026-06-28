@@ -27,14 +27,12 @@ API_KEY = os.environ.get('RAPIDAPI_KEY')
 API_HOST = "oddspapi.p.rapidapi.com" # Хост для RapidAPI шлюза
 
 def get_basketball_odds_from_papi():
-    # Эндпоинт для получения коэффициентов (обычно /odds или /fixtures/odds)
-    # Запрашиваем прематч линии на баскетбол
     url = "https://oddspapi.p.rapidapi.com/v5/odds"
     
     params = {
         "sport": "basketball",
-        "bookmakers": "pinnacle",  # Просим выдать кэфы конкретно Пинакла
-        "markets": "moneyline"     # Нам нужны чистые исходы матча (П1/П2)
+        "bookmakers": "pinnacle",
+        "markets": "moneyline"
     }
     
     headers = {
@@ -44,18 +42,30 @@ def get_basketball_odds_from_papi():
     
     try:
         response = requests.get(url, headers=headers, params=params, timeout=15)
+        print(f"=== HTTP статус: {response.status_code} ===")
+        print(f"=== Ответ от API (первые 2000 символов) ===")
+        print(response.text[:2000])
+        
         if response.status_code == 200:
-            # Большинство B2B API отдают список матчей напрямую или в массиве 'data'/'results'
             res_data = response.json()
+            print(f"=== Тип ответа: {type(res_data)} ===")
             if isinstance(res_data, list):
+                print(f"=== Количество матчей: {len(res_data)} ===")
+                if res_data:
+                    print("=== Структура первого матча ===")
+                    print(json.dumps(res_data[0], indent=2, ensure_ascii=False))
                 return res_data
-            return res_data.get('data', res_data.get('results', []))
+            else:
+                print(f"=== Ключи верхнего уровня: {list(res_data.keys())} ===")
+                result = res_data.get('data', res_data.get('results', []))
+                print(f"=== Найдено матчей: {len(result)} ===")
+                return result
         else:
             print(f"Ошибка OddsPapi: {response.status_code}")
-            print(f"Ответ от сервера: {response.text}")
+            print(f"Ответ: {response.text}")
             return []
     except Exception as e:
-        print(f"Ошибка запроса к OddsPapi: {e}")
+        print(f"Ошибка запроса: {e}")
         return []
 
 def save_to_firebase(fixtures):

@@ -15,7 +15,7 @@ else:
     cred = credentials.Certificate(firebase_creds)
 
 # !!! СЮДА ВСТАВЬ ССЫЛКУ НА СВОЮ БАЗУ ИЗ FIREBASE (ЗАКАНЧИВАЕТСЯ НА .firebaseio.com/) !!!
-FIREBASE_DB_URL = "https://pinnacle-tracker-a1f41-default-rtdb.firebaseio.com/" 
+FIREBASE_DB_URL = "https://pinnacle-tracker-a1f41-default-rtdb.firebaseio.com/"
 
 if not firebase_admin._apps:
     firebase_admin.initialize_app(cred, {

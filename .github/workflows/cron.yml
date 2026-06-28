@@ -22,7 +22,7 @@ jobs:
         pip install requests firebase-admin
 
     - name: Запускаем парсер
-      env:
-        FIREBASE_CONFIG_JSON: ${{ secrets.FIREBASE_CONFIG_JSON }}
-        RAPIDAPI_KEY: ${{ secrets.RAPIDAPI_KEY }}
+     env:
+  FIREBASE_CONFIG_JSON: ${{ secrets.FIREBASE_CONFIG_JSON }}
+  THEODDSAPI_KEY: ${{ secrets.THEODDSAPI_KEY }}
       run: python parser.py

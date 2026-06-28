@@ -1,28 +1,23 @@
 name: Basketball Line Parser Cron
-
 on:
   schedule:
-    - cron: '0 * * * *' # Запускать каждые 10 минут
-  workflow_dispatch: # Добавляет кнопку ручного запуска в GitHub
-
+    - cron: '0 * * * *'
+  workflow_dispatch:
 jobs:
   run-parser:
     runs-on: ubuntu-latest
     steps:
     - name: Копируем файлы репозитория
-      uses: actions/checkout@v4 # обновили с v3 на v4
-
+      uses: actions/checkout@v4
     - name: Включаем Python
-      uses: actions/setup-python@v5 # обновили с v4 на v5
+      uses: actions/setup-python@v5
       with:
         python-version: '3.10'
-
     - name: Устанавливаем библиотеки
       run: |
         pip install requests firebase-admin
-
     - name: Запускаем парсер
-     env:
-  FIREBASE_CONFIG_JSON: ${{ secrets.FIREBASE_CONFIG_JSON }}
-  THEODDSAPI_KEY: ${{ secrets.THEODDSAPI_KEY }}
+      env:
+        FIREBASE_CONFIG_JSON: ${{ secrets.FIREBASE_CONFIG_JSON }}
+        THEODDSAPI_KEY: ${{ secrets.THEODDSAPI_KEY }}
       run: python parser.py

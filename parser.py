@@ -23,7 +23,7 @@ def send_telegram(message):
         )
     except Exception as e:
         print(f"Telegram ошибка: {e}")
-        
+
 if os.path.exists('serviceAccountKey.json'):
     cred = credentials.Certificate('serviceAccountKey.json')
 else:
@@ -69,7 +69,6 @@ def get_odds_for_sport(sport_key):
         return []
 
 def parse_pinnacle_markets(fixture):
-    """Вытаскиваем фору и тотал из ответа Pinnacle"""
     pinnacle = next((b for b in fixture.get('bookmakers', []) if b['key'] == 'pinnacle'), None)
     if not pinnacle:
         return None
@@ -81,7 +80,6 @@ def parse_pinnacle_markets(fixture):
         outcomes = market.get('outcomes', [])
 
         if key == 'spreads':
-            # Фора: ищем home и away
             for o in outcomes:
                 if o['name'] == fixture['home_team']:
                     result['home_spread'] = o.get('point', 0)
@@ -91,7 +89,6 @@ def parse_pinnacle_markets(fixture):
                     result['away_spread_odds'] = o.get('price', 0)
 
         elif key == 'totals':
-            # Тотал: Over и Under
             for o in outcomes:
                 if o['name'] == 'Over':
                     result['total_line'] = o.get('point', 0)
@@ -116,7 +113,6 @@ def save_to_firebase(fixtures, sport_key):
         event_id = fixture['id']
         match_ref = ref.child(event_id)
 
-        # Проверяем изменения относительно предыдущих значений
         existing = match_ref.child('info').get()
         changed = False
 
@@ -135,17 +131,21 @@ def save_to_firebase(fixtures, sport_key):
 
             if spread_changed or total_changed or odds_changed:
                 changed = True
-                print(f"⚡ ДВИЖЕНИЕ: {home_team} vs {away_team}")
+                lines = [f"⚡ <b>{home_team} vs {away_team}</b>"]
+                lines.append(f"🏀 {fixture.get('sport_title', sport_key)}")
                 if spread_changed:
-                    print(f"   Фора: {prev_spread} → {markets.get('home_spread')}")
+                    lines.append(f"Фора: {prev_spread:+.1f} → {markets.get('home_spread'):+.1f}")
                 if total_changed:
-                    print(f"   Тотал: {prev_total} → {markets.get('total_line')}")
+                    lines.append(f"Тотал: {prev_total} → {markets.get('total_line')}")
                 if odds_changed:
-                    print(f"   Over: {prev_over:.2f} → {markets.get('over_odds'):.2f} | Under: {prev_under:.2f} → {markets.get('under_odds'):.2f}")
+                    lines.append(f"Over: {prev_over:.2f} → {markets.get('over_odds'):.2f} | Under: {prev_under:.2f} → {markets.get('under_odds'):.2f}")
+                msg = "\n".join(lines)
+                print(msg)
+                send_telegram(msg)
             else:
-                continue  # Без изменений — пропускаем
+                continue
         else:
-            changed = True  # Новый матч — записываем
+            changed = True
 
         if changed:
             match_ref.child('info').update({

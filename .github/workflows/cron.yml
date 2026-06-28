@@ -2,7 +2,7 @@ name: Basketball Line Parser Cron
 
 on:
   schedule:
-    - cron: '*/10 * * * *' # Запускать каждые 10 минут
+    - cron: '0 * * * *' # Запускать каждые 10 минут
   workflow_dispatch: # Добавляет кнопку ручного запуска в GitHub
 
 jobs:

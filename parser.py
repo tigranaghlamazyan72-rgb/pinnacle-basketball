@@ -21,15 +21,16 @@ def get_active_basketball_sports():
     params = {"apiKey": API_KEY}
     response = requests.get(url, params=params, timeout=15)
     sports = response.json()
-    # Этот запрос НЕ тратит квоту
-    return [s['key'] for s in sports if 'basketball' in s['key'] and s['active']]
+    result = [s['key'] for s in sports if 'basketball' in s['key'] and s['active']]
+    print(f"Активные баскетбольные лиги: {result}")
+    return result
 
 def get_odds_for_sport(sport_key):
     url = f"https://api.the-odds-api.com/v4/sports/{sport_key}/odds/"
     params = {
         "apiKey": API_KEY,
         "regions": "eu",
-        "markets": "h2h",
+        "markets": "spreads,totals",
         "bookmakers": "pinnacle",
         "oddsFormat": "decimal"
     }
@@ -48,66 +49,106 @@ def get_odds_for_sport(sport_key):
         print(f"[{sport_key}] исключение: {e}")
         return []
 
+def parse_pinnacle_markets(fixture):
+    """Вытаскиваем фору и тотал из ответа Pinnacle"""
+    pinnacle = next((b for b in fixture.get('bookmakers', []) if b['key'] == 'pinnacle'), None)
+    if not pinnacle:
+        return None
+
+    result = {}
+
+    for market in pinnacle.get('markets', []):
+        key = market['key']
+        outcomes = market.get('outcomes', [])
+
+        if key == 'spreads':
+            # Фора: ищем home и away
+            for o in outcomes:
+                if o['name'] == fixture['home_team']:
+                    result['home_spread'] = o.get('point', 0)
+                    result['home_spread_odds'] = o.get('price', 0)
+                elif o['name'] == fixture['away_team']:
+                    result['away_spread'] = o.get('point', 0)
+                    result['away_spread_odds'] = o.get('price', 0)
+
+        elif key == 'totals':
+            # Тотал: Over и Under
+            for o in outcomes:
+                if o['name'] == 'Over':
+                    result['total_line'] = o.get('point', 0)
+                    result['over_odds'] = o.get('price', 0)
+                elif o['name'] == 'Under':
+                    result['under_odds'] = o.get('price', 0)
+
+    return result if result else None
+
 def save_to_firebase(fixtures, sport_key):
     ref = db.reference('basketball_lines')
     current_time = int(time.time())
     count = 0
 
     for fixture in fixtures:
-        pinnacle = next((b for b in fixture.get('bookmakers', []) if b['key'] == 'pinnacle'), None)
-        if not pinnacle:
+        markets = parse_pinnacle_markets(fixture)
+        if not markets:
             continue
 
-        h2h = next((m for m in pinnacle.get('markets', []) if m['key'] == 'h2h'), None)
-        if not h2h:
-            continue
-
-        outcomes = {o['name']: o['price'] for o in h2h.get('outcomes', [])}
         home_team = fixture['home_team']
         away_team = fixture['away_team']
-        home_odds = outcomes.get(home_team, 0)
-        away_odds = outcomes.get(away_team, 0)
-
-        if not home_odds or not away_odds:
-            continue
-
         event_id = fixture['id']
         match_ref = ref.child(event_id)
 
-        # Проверяем предыдущие коэффициенты
+        # Проверяем изменения относительно предыдущих значений
         existing = match_ref.child('info').get()
-        if existing:
-            prev_home = existing.get('last_home_odds', 0)
-            prev_away = existing.get('last_away_odds', 0)
-            home_changed = abs(home_odds - prev_home) >= 0.01
-            away_changed = abs(away_odds - prev_away) >= 0.01
-            
-            if home_changed or away_changed:
-                print(f"⚡ ДВИЖЕНИЕ: {home_team} vs {away_team}")
-                if home_changed:
-                    print(f"   П1: {prev_home:.2f} → {home_odds:.2f}")
-                if away_changed:
-                    print(f"   П2: {prev_away:.2f} → {away_odds:.2f}")
-            else:
-                # Коэффициенты не изменились — историю не пишем
-                continue
+        changed = False
 
-        match_ref.child('info').update({
-            "home": home_team,
-            "away": away_team,
-            "league": fixture.get('sport_title', sport_key),
-            "starts": fixture.get('commence_time', ''),
-            "last_home_odds": home_odds,
-            "last_away_odds": away_odds,
-            "last_update": current_time,
-            "bookmaker_source": "Pinnacle"
-        })
-        match_ref.child('history').push({
-            "timestamp": current_time,
-            "home_odds": home_odds,
-            "away_odds": away_odds
-        })
-        count += 1
+        if existing:
+            prev_spread = existing.get('home_spread', 0)
+            prev_total = existing.get('total_line', 0)
+            prev_over = existing.get('over_odds', 0)
+            prev_under = existing.get('under_odds', 0)
+
+            spread_changed = abs(markets.get('home_spread', 0) - prev_spread) >= 0.25
+            total_changed = abs(markets.get('total_line', 0) - prev_total) >= 0.5
+            odds_changed = (
+                abs(markets.get('over_odds', 0) - prev_over) >= 0.01 or
+                abs(markets.get('under_odds', 0) - prev_under) >= 0.01
+            )
+
+            if spread_changed or total_changed or odds_changed:
+                changed = True
+                print(f"⚡ ДВИЖЕНИЕ: {home_team} vs {away_team}")
+                if spread_changed:
+                    print(f"   Фора: {prev_spread} → {markets.get('home_spread')}")
+                if total_changed:
+                    print(f"   Тотал: {prev_total} → {markets.get('total_line')}")
+                if odds_changed:
+                    print(f"   Over: {prev_over:.2f} → {markets.get('over_odds'):.2f} | Under: {prev_under:.2f} → {markets.get('under_odds'):.2f}")
+            else:
+                continue  # Без изменений — пропускаем
+        else:
+            changed = True  # Новый матч — записываем
+
+        if changed:
+            match_ref.child('info').update({
+                "home": home_team,
+                "away": away_team,
+                "league": fixture.get('sport_title', sport_key),
+                "starts": fixture.get('commence_time', ''),
+                "home_spread": markets.get('home_spread', 0),
+                "home_spread_odds": markets.get('home_spread_odds', 0),
+                "away_spread": markets.get('away_spread', 0),
+                "away_spread_odds": markets.get('away_spread_odds', 0),
+                "total_line": markets.get('total_line', 0),
+                "over_odds": markets.get('over_odds', 0),
+                "under_odds": markets.get('under_odds', 0),
+                "last_update": current_time,
+                "bookmaker_source": "Pinnacle"
+            })
+            match_ref.child('history').push({
+                "timestamp": current_time,
+                **markets
+            })
+            count += 1
 
     return count
 
@@ -116,13 +157,10 @@ if __name__ == "__main__":
         print("Ошибка: THEODDSAPI_KEY не задан")
     else:
         sports = get_active_basketball_sports()
-        print(f"Активных баскетбольных лиг: {len(sports)} — {sports}")
-        
         total = 0
         for sport_key in sports:
             fixtures = get_odds_for_sport(sport_key)
             if fixtures:
                 updated = save_to_firebase(fixtures, sport_key)
                 total += updated
-        
         print(f"Итого обновлено матчей с движением: {total}")
